@@ -22,14 +22,14 @@ agents["dialogue"] = {
 }
 
 for agent in agents:
-    agentsListing += "{}: {},\n".format(agent, agents[agent]["description"])
+    agentsListing += "{}: {},\n ".format(agent, agents[agent]["description"])
 
-agentDefinitionPrompt = """The agents list is provided in format 'name: description' and is the following: \n {} \n; 
-Tell which of these agents would serve the user request better?
+agentDefinitionPrompt = str("""The agents list is provided in format 'name: description' and is the following: \n {} \n  
+ Tell which of these agents would serve the user request better?
 Return just agent name.
 """.format(
     agentsListing[:-2]
-)
+))
 
 
 class YellowGPTClient:
@@ -62,7 +62,7 @@ class YellowGPTClient:
 
     @property
     def isRoleLocked(self):
-        return self._isroleLocked
+        return self._isRoleLocked
     
     @isRoleLocked.setter
     def isRoleLocked(self, value):
@@ -75,14 +75,14 @@ class YellowGPTClient:
     def role(self):
         return self._role
 
-    def query(self, message, systemMessage=None, context=None):
+    def query(self, message, systemMessage=None, context=None, showRole=True):
         if systemMessage is None:
             systemMessage = {"role": "system", "content": self._roles[self._role]}
 
         if context is not None:
             systemMessage[
                 "content"
-            ] += "\n The current discussion context is as follows: {} \n".format(context)
+            ] += "\n Respond considering the context of the following discussion: {} \n".format(context)
 
         userMessage = {"role": "user", "content": message}
 
@@ -91,31 +91,32 @@ class YellowGPTClient:
         )
 
         response = aiResponse.choices[0].message.content
+        if showRole:
+            response = "Role: {}\n\n{}".format(self._role, response)
 
         return response
 
-    def defineRole(self, message):
+    def defineRole(self, *args, message, **kwargs):
         global roleDefinitionPrompt
 
         systemMessage = {"role": "system", "content": roleDefinitionPrompt}
         
+        if not self.isRoleLocked:
+            role = self.query(message=message, systemMessage=systemMessage, showRole=False)
 
-        role = self.query(message=message, systemMessage=systemMessage)
+            if role in self._roles:
+                self._role = role
 
-        if role in self._roles:
-            self._role = role
+        return self.query(message=message, **kwargs)
 
-        return self.query(message=message)
-
-    def defineAgent(self, message):
+    def defineAgent(self, message, **kwargs):
         global agentDefinitionPrompt
 
         systemMessage = {"role": "system", "content": agentDefinitionPrompt}
-        userMessage = {"role": "user", "content": message}
 
-        agent = self.query(message=userMessage, systemMessage=systemMessage)
+        agent = self.query(message=message, systemMessage=systemMessage, showRole=False)
 
         if agent in self._agents:
             self._agent = agent
 
-        return self._agents[self._agent]["method"](self, message=message)
+        return self._agents[self._agent]["method"](self, message=message, **kwargs)

@@ -10,25 +10,45 @@ from pprint import pprint
 
 class YellowContextCup:
 
-    def __init__(self):
-        pass
+    def __init__(self, maxLength=10):
+
+        self._maxLength = maxLength
+        self._storage = []
+        self._lastFetchDate = 0
+
+    def store(self, itemString):
+
+        self._storage.append(str(itemString))
+        if len(self._storage) > self._maxLength:
+            del self._storage[0]
+
+    @property
+    def context(self):
+        return "\n".join(self._storage)
+
+    @property
+    def storage(self):
+        return self._storage
+
+    @property
+    def lastFetchDate(self):
+        return self._lastFetchDate
+
+    @lastFetchDate.setter
+    def lastFetchDate(self, update):
+        self._lastfetchDate = update
+
 
 class YellowLLMCup:
 
     pollPeriodSeconds = 3
 
-    def __init__(self):
+    def __init__(self, contextCapacity=10):
+        self._contextCapacity = contextCapacity
         self.chatBot = YellowChatBot("Telegram")
         self.users = {}
-            # {
-            #     userId: {
-            #         "data": YellowCustomer(),
-            #         "contextCup": {
-            #             chatId: "text"
-            #         }
-            #     }
-            # }
-        # self.GPT = YellowGPTClient()
+        self.contexts = {}
+        self.GPT = YellowGPTClient()
         self.customersDB = YellowDB(environment.DBName)
 
     def getCustomer(self, user):
@@ -43,43 +63,45 @@ class YellowLLMCup:
             customer = self.users[user]
 
         return customer
-    
-    def getMessageContext(self, message):
-        context = ""
-        chat = self.chatBot.chats[message.chatId]
-        for msg in chat.messages:
-            if msg.userId == message.userId:
-                context += msg.content + "\n"
-        
+
+    def fetchMessageContext(self, message):
+        contextId = "{}{}".format(message.userId, message.chatId)
+        if not contextId in self.contexts:
+            context = YellowContextCup(maxLength=self._contextCapacity)
+            self.contexts[contextId] = context
+        else:
+            context = self.contexts[contextId]
+
+        context.lastFetchDate = message.date
+
         return context
+
+    def getMessageContext(self, message):
+        context = self.fetchMessageContext(message)
+
+        return context.context
+
+    def updateMessageContext(self, message, LLMResponseString=None):
+        context = self.fetchMessageContext(message)
+        if LLMResponseString is None:
+            context.store(message.content)
+        else:
+            context.store(LLMResponseString)
 
     def run(self):
         while True:
             self.chatBot.getUpdates()
-            
-            print("---MESSAGES---")
+
             for msg in self.chatBot.messages:
                 if msg.isHandledCode == 0:
-                    # pprint(vars(msg))
                     user = msg.userId
-                    customer = self.getCustomer(user)
-                    # pprint(vars(customer))
+                    # customer = self.getCustomer(user)
                     context = self.getMessageContext(msg)
-                    res1=self.chatBot.sendMessage("The context: ", msg.chatId)
-                    res2=self.chatBot.sendMessage(context, msg.chatId)
+                    self.updateMessageContext(msg)
+                    response = self.GPT.defineAgent(message=msg.content, context=context)
+                    self.updateMessageContext(msg, LLMResponseString=response)
+                    self.chatBot.sendMessage(chat=msg.chatId, message=response)
                     msg.isHandledCode = 1
-            print("=====")
-
-            
-
-            print("---CHATS---")
-            for chat in self.chatBot.chats:
-                pprint(vars(self.chatBot.chats[chat]))
-            print("=====")
-            print("---USERS---")
-            for user in self.chatBot.users:
-                print(user)
-                pprint(vars(self.chatBot.users[user]))
-            print("=====")
+                    pprint(vars(msg))
 
             sleep(self.pollPeriodSeconds)

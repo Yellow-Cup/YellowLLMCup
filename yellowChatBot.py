@@ -290,7 +290,7 @@ class YellowTelegram(__YellowChatBotSuperclass):
 
         return updates
 
-    def sendMessage(self, message, chat):
+    def sendMessage(self, chat, message):
         url = "{}{}".format(self._rootUrl, self._sendMessageAPIMethod)
         data = {"chat_id": chat, "text": message}
         result = requests.post(url, data=data)
