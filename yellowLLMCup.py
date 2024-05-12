@@ -30,6 +30,9 @@ class YellowContextCup:
     @property
     def storage(self):
         return self._storage
+    
+    def clear(self):
+        self._storage.clear()
 
     @property
     def lastFetchDate(self):
@@ -100,34 +103,43 @@ class YellowLLMCup:
         else:
             context.store(LLMResponseString)
 
-    def getRoleInChat(self, chatId):
-        if not chatId in self._rolesInChats:
-            self._rolesInChats[chatId] = {
+    def clearContext(self, message):
+        context = self.fetchMessageContext(message)
+        context.clear()
+
+        return {
+            "role": self.getRoleInChat(message),
+            "response": "The context is cleared; new discussion from here on."
+        }
+
+    def getRoleInChat(self, message):
+        if not message.chatId in self._rolesInChats:
+            self._rolesInChats[message.chatId] = {
                 "role": roles.defaultRole,
                 "isRoleLocked": False,
             }
 
-        return self._rolesInChats[chatId]
+        return self._rolesInChats[message.chatId]
 
-    def updateRoleInChat(self, chatId, role):
-        isLocked = self.getRoleInChat(chatId)["isRoleLocked"]
+    def updateRoleInChat(self, message, role):
+        isLocked = self.getRoleInChat(message=message)["isRoleLocked"]
         if not isLocked:
-            self._rolesInChats[chatId]["role"] = role
+            self._rolesInChats[message.chatId]["role"] = role
 
         return isLocked
 
-    def lockRoleInChat(self, chatId):
-        roleData = self.getRoleInChat(chatId=chatId)
-        self._rolesInChats[chatId]["isLocked"] = True
+    def lockRoleInChat(self, message):
+        roleData = self.getRoleInChat(message=message)
+        self._rolesInChats[message.chatId]["isLocked"] = True
 
         return {
             "role": roleData["role"],
             "response": 'Locked the role: "{}"'.format(roleData["role"]),
         }
 
-    def unlockRoleInChat(self, chatId):
-        roleData = self.getRoleInChat(chatId=chatId)
-        self._rolesInChats[chatId]["isLocked"] = False
+    def unlockRoleInChat(self, message):
+        roleData = self.getRoleInChat(message=message)
+        self._rolesInChats[message.chatId]["isLocked"] = False
 
         return {
             "role": roleData["role"],
@@ -143,6 +155,7 @@ class YellowLLMCup:
             except Exception as e:
                 print(e)
                 self._failedPollAttempts += 1
+                print("Chat polling fail {} of {} attempts".format(self._failedPollAttempts, self.maxPollAttempts))
                 if self._failedPollAttempts >= self.maxPollAttempts:
                     exit()
 
@@ -151,12 +164,13 @@ class YellowLLMCup:
                     # user = msg.userId
                     # customer = self.getCustomer(user)
                     context = self.getMessageContext(message=msg)
-                    roleData = self.getRoleInChat(chatId=msg.chatId)
+                    roleData = self.getRoleInChat(message=msg)
                     role = roleData["role"]
                     isRoleLocked = roleData["isRoleLocked"]
                     self.updateMessageContext(message=msg)
                     result = self._LLM.defineAgent(
-                        message=msg.content,
+                        message=msg,
+                        prompt=msg.content,
                         context=context,
                         role=role,
                         chatId=msg.chatId,
@@ -165,7 +179,7 @@ class YellowLLMCup:
                     )
                     response = result["response"]
                     role = result["role"]
-                    self.updateRoleInChat(chatId=msg.chatId, role=role)
+                    self.updateRoleInChat(message=msg, role=role)
                     self.updateMessageContext(message=msg, LLMResponseString=response)
                     self._chatBot.sendMessage(chat=msg.chatId, message=response)
                     msg.isHandledCode = 1

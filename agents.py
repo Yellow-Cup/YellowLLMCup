@@ -5,25 +5,28 @@ The expected output of an agent is a dictionary of the following kind:
 }
 """
 
-def lockRoleInChatAgent(*args, yellowLLMCupInstance, chatId, **kwargs):
-    return yellowLLMCupInstance.lockRoleInChat(chatId=chatId)
+def lockRoleInChatAgent(*args, yellowLLMCupInstance, message, **kwargs):
+    return yellowLLMCupInstance.lockRoleInChat(message=message)
 
-def unlockRoleInChatAgent(*args, yellowLLMCupInstance, chatId, **kwargs):
-    return yellowLLMCupInstance.unlockRoleInChat(chatId=chatId)
+def unlockRoleInChatAgent(*args, yellowLLMCupInstance, message, **kwargs):
+    return yellowLLMCupInstance.unlockRoleInChat(message=message)
 
-def yellowLLMLockRoleAgent(yellowLLMClientInstance, **kwargs):
-    yellowLLMClientInstance.isRoleLocked = True
-    return {
-        "role": None,
-        "response": "The role is locked: {}".format(yellowLLMClientInstance.role)
-    }
+def dropContextAgent(*args, yellowLLMCupInstance, message, **kwargs):
+    return yellowLLMCupInstance.clearContext(message=message)
 
-def yellowLLMUnlockRoleAgent(yellowLLMClientInstance, **kwargs):
-    yellowLLMClientInstance.isRoleLocked = False
-    return {
-        "role": None,
-        "response": "The role is unlocked"
-    }
+# def yellowLLMLockRoleAgent(yellowLLMClientInstance, **kwargs):
+#     yellowLLMClientInstance.isRoleLocked = True
+#     return {
+#         "role": None,
+#         "response": "The role is locked: {}".format(yellowLLMClientInstance.role)
+#     }
+
+# def yellowLLMUnlockRoleAgent(yellowLLMClientInstance, **kwargs):
+#     yellowLLMClientInstance.isRoleLocked = False
+#     return {
+#         "role": None,
+#         "response": "The role is unlocked"
+#     }
 
 agents = {  # don't add "dialogue" agent, this one is added in yellowLLMClient package
     "lockRole": {
@@ -33,5 +36,9 @@ agents = {  # don't add "dialogue" agent, this one is added in yellowLLMClient p
     "unlockRole": {
         "description": "user wants system to unlock role changing and be able to switch roles dynamically. The input might be single 'unlock' word or a more long imperative",
         "method": unlockRoleInChatAgent  # yellowLLMUnlockRoleAgent
+    },
+    "clearContext": {
+        "description": "user wants system to clear current discussion context. The input might be 'drop context', 'clear context' or a another imperative of similar meaning",
+        "method": dropContextAgent 
     },
 }

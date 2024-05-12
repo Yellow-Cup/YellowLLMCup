@@ -81,13 +81,13 @@ class YellowLLMClient:
             self._role = roles.defaultRole
 
     def query(
-        self, message, role=None, systemMessage=None, context=None, showRole=True, **kwargs
+        self, prompt, role=None, systemMessage=None, context=None, showRole=True, **kwargs
     ):
         if role is None:
             role = self.role
 
         if systemMessage is None:
-            systemMessage = {"role": "system", "content": self._roles[role]}
+            systemMessage = {"role": "system", "content": self._roles[role]["content"]}
 
         if context is not None:
             systemMessage[
@@ -96,7 +96,7 @@ class YellowLLMClient:
                 context
             )
 
-        userMessage = {"role": "user", "content": message}
+        userMessage = {"role": "user", "content": prompt}
 
         aiResponse = self._client.chat.completions.create(
             model=self._model, messages=[systemMessage, userMessage]
@@ -108,7 +108,7 @@ class YellowLLMClient:
 
         return {"response": response, "role": role}
 
-    def defineRole(self, *args, message, isRoleLocked=None, **kwargs):
+    def defineRole(self, *args, prompt, isRoleLocked=None, **kwargs):
         global roleDefinitionPrompt
 
         systemMessage = {"role": "system", "content": roleDefinitionPrompt}
@@ -118,25 +118,25 @@ class YellowLLMClient:
 
         if not isRoleLocked:
             role = self.query(
-                message=message, systemMessage=systemMessage, showRole=False
+                prompt=prompt, systemMessage=systemMessage, showRole=False
             )["response"]
 
             self.role = role
 
             kwargs["role"] = self.role
 
-        return self.query(message=message, **kwargs)
+        return self.query(prompt=prompt, **kwargs)
 
-    def defineAgent(self, message, **kwargs):
+    def defineAgent(self, prompt, **kwargs):
         global agentDefinitionPrompt, defaultAgent
 
         systemMessage = {"role": "system", "content": agentDefinitionPrompt}
 
         agent = self.query(
-            message=message, systemMessage=systemMessage, showRole=False
+            prompt=prompt, systemMessage=systemMessage, showRole=False
         )["response"]
 
         if agent not in self._agents:
             agent = defaultAgent
 
-        return self._agents[agent]["method"](self, message=message, **kwargs)
+        return self._agents[agent]["method"](self, prompt=prompt, **kwargs)
