@@ -4,7 +4,9 @@ import roles
 from agents import agents
 
 
-defaultModel = "gpt-3.5-turbo"
+defaultModel = "gpt-4-turbo"
+# defaultModel = "gpt-4"
+# defaultModel = "gpt-3.5-turbo"
 defaultAgent = "dialogue"
 
 roleDefinitionPrompt = """You have the following roles: {}; 
@@ -86,6 +88,11 @@ class YellowLLMClient:
         if role is None:
             role = self.role
 
+        if "temperature" in self._roles[role]:
+            temperature = self._roles[role]["temperature"]
+        else:
+            temperature = 1
+
         if systemMessage is None:
             systemMessage = {"role": "system", "content": self._roles[role]["content"]}
 
@@ -99,7 +106,9 @@ class YellowLLMClient:
         userMessage = {"role": "user", "content": prompt}
 
         aiResponse = self._client.chat.completions.create(
-            model=self._model, messages=[systemMessage, userMessage]
+            model=self._model,
+            messages=[systemMessage, userMessage],
+            temperature=temperature
         )
 
         response = aiResponse.choices[0].message.content
