@@ -1,7 +1,8 @@
 from yellowChatBot import YellowChatBot
 from yellowLLMClient import YellowLLMClient
-from yellowDB import YellowDB
+from yellowLLMDB import YellowLLMDB
 from yellowCustomer import YellowCustomer
+from yellowLLMStats import YellowLLMStats
 import roles
 from time import sleep
 import environment
@@ -30,7 +31,7 @@ class YellowContextCup:
     @property
     def storage(self):
         return self._storage
-    
+
     def clear(self):
         self._storage.clear()
 
@@ -47,8 +48,9 @@ class YellowLLMCup:
 
     pollPeriodSeconds = 3
     maxPollAttempts = 10
+    agentRole = "Agent"
 
-    def __init__(self, contextCapacity=10):
+    def __init__(self, contextCapacity=5):
         self._contextCapacity = contextCapacity
         self._failedPollAttempts = 0
         self._chatBot = YellowChatBot("Telegram")
@@ -63,12 +65,13 @@ class YellowLLMCup:
         #         },
         # }
 
-        self._LLM = YellowLLMClient()
-        self._customersDB = YellowDB(environment.DBName)
+        self._DB = YellowLLMDB(environment.DBName)
+        self._LLM = YellowLLMClient(self._DB)
+        self._LLMStats = YellowLLMStats(self._DB)
 
     def getCustomer(self, user):
         if not user in self._users:
-            self._users[user] = YellowCustomer(self._customersDB, user)
+            self._users[user] = YellowCustomer(self._DB, user)
             customer = self._users[user]
             if not customer.everSaved:
                 customer.name = self._chatBot.users[user].userHandler
@@ -108,8 +111,8 @@ class YellowLLMCup:
         context.clear()
 
         return {
-            "role": self.getRoleInChat(message),
-            "response": "The context is cleared; new discussion from here on."
+            "role": self.agentRole,
+            "response": "The context is cleared; new discussion from here on.",
         }
 
     def getRoleInChat(self, message):
@@ -133,7 +136,7 @@ class YellowLLMCup:
         self._rolesInChats[message.chatId]["isLocked"] = True
 
         return {
-            "role": roleData["role"],
+            "role": self.agentRole,
             "response": 'Locked the role: "{}"'.format(roleData["role"]),
         }
 
@@ -142,7 +145,7 @@ class YellowLLMCup:
         self._rolesInChats[message.chatId]["isLocked"] = False
 
         return {
-            "role": roleData["role"],
+            "role": self.agentRole,
             "response": 'The role "{}" is locked no more.'.format(roleData["role"]),
         }
 
@@ -155,19 +158,24 @@ class YellowLLMCup:
             except Exception as e:
                 print(e)
                 self._failedPollAttempts += 1
-                print("Chat polling fail {} of {} attempts".format(self._failedPollAttempts, self.maxPollAttempts))
+                print(
+                    "Chat polling fail {} of {} attempts".format(
+                        self._failedPollAttempts, self.maxPollAttempts
+                    )
+                )
                 if self._failedPollAttempts >= self.maxPollAttempts:
                     exit()
 
             for msg in self._chatBot.messages:
                 if msg.isHandledCode == 0:
-                    # user = msg.userId
-                    # customer = self.getCustomer(user)
+                    user = msg.userId
+                    customer = self.getCustomer(user)
                     context = self.getMessageContext(message=msg)
                     roleData = self.getRoleInChat(message=msg)
                     role = roleData["role"]
                     isRoleLocked = roleData["isRoleLocked"]
                     self.updateMessageContext(message=msg)
+
                     result = self._LLM.defineAgent(
                         message=msg,
                         prompt=msg.content,
@@ -177,13 +185,39 @@ class YellowLLMCup:
                         isRoleLocked=isRoleLocked,
                         yellowLLMCupInstance=self,
                     )
+                    
                     response = result["response"]
                     role = result["role"]
-                    self.updateRoleInChat(message=msg, role=role)
-                    self.updateMessageContext(message=msg, LLMResponseString=response)
+
+                    if "tokensUsage" in result:
+                        tokensUsed = result["tokensUsage"]
+                    else:
+                        tokensUsed = self._LLM.tokenStatsDefault
+
+                    tokenStatsDict = {
+                        self._LLMStats.schema.promptTokensSpent.name: tokensUsed[
+                            self._LLM.promptTokensSpentKey
+                        ],
+                        self._LLMStats.schema.completionTokensSpent.name: tokensUsed[
+                            self._LLM.completionTokensSpentKey
+                        ],
+                    }
+
+                    self._LLMStats.updateTokenStats(
+                        UID=customer.uid,
+                        timestamp=msg.date,
+                        tokenStatsDict=tokenStatsDict,
+                    )
+
+                    if role != self.agentRole:
+                        self.updateRoleInChat(message=msg, role=role)
+                        self.updateMessageContext(message=msg, LLMResponseString=response)
                     self._chatBot.sendMessage(chat=msg.chatId, message=response)
                     msg.isHandledCode = 1
+
                     pprint(vars(msg))
                     print(response)
+                    print(datetime.fromtimestamp(msg.date))
+                    print(tokensUsed)
 
             sleep(self.pollPeriodSeconds)

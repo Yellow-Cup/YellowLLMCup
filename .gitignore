@@ -2,7 +2,7 @@ images/
 1.py
 temp/
 environment.py
-*.sqlite
+*.sqlite*
 *.log
 
 # Created by https://www.toptal.com/developers/gitignore/api/python

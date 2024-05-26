@@ -4,7 +4,8 @@ import roles
 from agents import agents
 
 
-defaultModel = "gpt-4-turbo"
+defaultModel = "gpt-4o"
+# defaultModel = "gpt-4-turbo"
 # defaultModel = "gpt-4"
 # defaultModel = "gpt-3.5-turbo"
 defaultAgent = "dialogue"
@@ -43,6 +44,9 @@ class YellowLLMClient:
     'query' generates a response from the perspective of a role set ('_role')
     """
 
+    promptTokensSpentKey = "prompt_tokens"
+    completionTokensSpentKey = "completion_tokens"
+
     def __init__(
         self,
         locked=False,
@@ -59,6 +63,10 @@ class YellowLLMClient:
 
         self._isRoleLocked = locked
         self._role = roles.defaultRole
+        self.tokenStatsDefault = {
+            self.promptTokensSpentKey: 0,
+            self.completionTokensSpentKey: 0
+        }
 
     @property
     def isRoleLocked(self):
@@ -74,7 +82,7 @@ class YellowLLMClient:
     @property
     def role(self):
         return self._role
-    
+
     @role.setter
     def role(self, roleSuggestion):
         if roleSuggestion in self._roles:
@@ -82,8 +90,29 @@ class YellowLLMClient:
         else:
             self._role = roles.defaultRole
 
+    def __tokenStatsChain(self, accumulatedTokenStats=None, currentTokenStats=None):
+        result = {}
+
+        if accumulatedTokenStats is None:
+            accumulatedTokenStats = self.tokenStatsDefault
+        
+        if currentTokenStats is None:
+            return accumulatedTokenStats
+
+        for key in self.tokenStatsDefault:
+            result[key] = accumulatedTokenStats[key] + currentTokenStats[key]
+        
+        return result
+
     def query(
-        self, prompt, role=None, systemMessage=None, context=None, showRole=True, **kwargs
+        self,
+        prompt,
+        role=None,
+        systemMessage=None,
+        context=None,
+        showRole=True,
+        accumulatedTokenUsage=None,
+        **kwargs
     ):
         if role is None:
             role = self.role
@@ -108,16 +137,20 @@ class YellowLLMClient:
         aiResponse = self._client.chat.completions.create(
             model=self._model,
             messages=[systemMessage, userMessage],
-            temperature=temperature
+            temperature=temperature,
         )
 
         response = aiResponse.choices[0].message.content
+        currentTokenStats = vars(aiResponse.usage)
+
+        tokensUsed = self.__tokenStatsChain(accumulatedTokenUsage, currentTokenStats)
+
         if showRole:
             response = "{}:\n\n{}".format(role, response)
 
-        return {"response": response, "role": role}
+        return {"response": response, "role": role, "tokensUsage": tokensUsed}
 
-    def defineRole(self, *args, prompt, isRoleLocked=None, **kwargs):
+    def defineRole(self, *args, prompt, isRoleLocked=None, accumulatedTokenUsage=None, **kwargs):
         global roleDefinitionPrompt
 
         systemMessage = {"role": "system", "content": roleDefinitionPrompt}
@@ -126,26 +159,32 @@ class YellowLLMClient:
             isRoleLocked = self.isRoleLocked
 
         if not isRoleLocked:
-            role = self.query(
+            roleDict = self.query(
                 prompt=prompt, systemMessage=systemMessage, showRole=False
-            )["response"]
+            )
+
+            role = roleDict["response"]
+            currentTokenStats = roleDict["tokensUsage"]
+            tokensUsed = self.__tokenStatsChain(accumulatedTokenUsage, currentTokenStats)
 
             self.role = role
 
             kwargs["role"] = self.role
 
-        return self.query(prompt=prompt, **kwargs)
+        return self.query(
+            prompt=prompt, accumulatedTokenUsage=tokensUsed, **kwargs
+        )
 
     def defineAgent(self, prompt, **kwargs):
         global agentDefinitionPrompt, defaultAgent
 
         systemMessage = {"role": "system", "content": agentDefinitionPrompt}
 
-        agent = self.query(
-            prompt=prompt, systemMessage=systemMessage, showRole=False
-        )["response"]
+        agentDict = self.query(prompt=prompt, systemMessage=systemMessage, showRole=False)
+        
+        agent = agentDict["response"]
 
         if agent not in self._agents:
             agent = defaultAgent
 
-        return self._agents[agent]["method"](self, prompt=prompt, **kwargs)
+        return self._agents[agent]["method"](self, prompt=prompt, accumulatedTokenUsage=agentDict["tokensUsage"], **kwargs)

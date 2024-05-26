@@ -1,8 +1,10 @@
 import json
+from yellowLLMDB import CustomerSchema
 class YellowCustomer:
     def __init__(self, db, uid=""):
         self.clear(uid)
         self.db = db
+        self._schema = CustomerSchema()
 
         if uid != "":
             self.__fetchData()
@@ -23,17 +25,28 @@ class YellowCustomer:
 
         return None
 
-    def collect(self):
+        # self.id = SchemaAttribute(name="ID", typeName="INTEGER", restrictions="PRIMARY KEY")
+        # self.uid = SchemaAttribute(name="UID", restrictions="UNIQUE")
+        # self.email = SchemaAttribute(name="EMAIL")
+        # self.name = SchemaAttribute(name="NAME")
+        # self.createdAt = SchemaAttribute(name="CREATED_AT")
+        # self.isLicenceActive = SchemaAttribute(name="IS_LICENSE_ACTIVE")
+        # self.licenseType = SchemaAttribute(name="LICENSE_TYPE")
+        # self.licenseActivatedDate = SchemaAttribute(name="LICENCE_ACTIVATED_DATE")
+        # self.licenseExpiresDate = SchemaAttribute(name="LICENSE_EXPIRES_DATE")
+        # self.customerJSON = SchemaAttribute(name="CUSTOMER_JSON")
+
+    def __collect(self):
         return {
-            "UID": self.__uid,
-            "EMAIL": self.__email,
-            "NAME": self.__name,
-            "CREATED_AT": self.__createdAt,
-            "IS_LICENSE_ACTIVE": self.__isLicenseActive,
-            "LICENSE_TYPE": self.__licenseType,
-            "LICENSE_ACTIVATED_DATE": self.__licenseActivatedDate,
-            "LICENSE_EXPIRES_DATE": self.__licenseExpiresDate,
-            "CUSTOMER_JSON": self.__properties,
+            self._schema.uid.name: self.__uid,
+            self._schema.email.name: self.__email,
+            self._schema.name.name: self.__name,
+            self._schema.createdAt.name: self.__createdAt,
+            self._schema.isLicenseActive.name: self.__isLicenseActive,
+            self._schema.licenseType.name: self.__licenseType,
+            self._schema.licenseActivatedDate.name: self.__licenseActivatedDate,
+            self._schema.licenseExpiresDate.name: self.__licenseExpiresDate,
+            self._schema.customerJSON.name: self.__properties,
         }
 
     @property
@@ -154,7 +167,7 @@ class YellowCustomer:
         if self.uid == "":
             return False
 
-        result = self.db.retrieveData({"UID": self.uid}, self.db.customersTableName)
+        result = self.db.retrieveData({self._schema.uid.name: self.uid}, self.db.customersTableName)
 
         if result:
             data = result[0]
@@ -174,9 +187,9 @@ class YellowCustomer:
         return result
 
     def save(self):
-        updateDict = self.collect()
+        updateDict = self.__collect()
         if self.__everSaved:
-            conditionDict = {"UID": self.uid}
+            conditionDict = {self._schema.uid.name: self.uid}
             result = self.db.updateData(
                 updateDict, conditionDict, self.db.customersTableName
             )
@@ -188,7 +201,7 @@ class YellowCustomer:
         return result
     
     def delete(self):
-        result = self.db.deleteData({"UID": self.uid}, self.db.customersTableName)
+        result = self.db.deleteData({self._schema.uid.name: self.uid}, self.db.customersTableName)
         self.clear("")
 
         return result
