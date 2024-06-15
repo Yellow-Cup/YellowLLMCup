@@ -88,7 +88,7 @@ class YellowLLMDB():
         self.connection.close()
 
 
-    def __sustainConnection(self):
+    def sustainConnection(self):
         if datetime.now() > self.reconnectTime:
             self.closeConnection()
             self.__openConnection()
@@ -171,7 +171,7 @@ class YellowLLMDB():
         columns, values = self.dictToColumnsAndValues(dataDictionary)
         query = "INSERT INTO {} ({}) VALUES ({});".format(tableName, columns, values)
 
-        self.__sustainConnection()
+        self.sustainConnection()
 
         try:
             result = self.cursor.execute(query)
@@ -193,7 +193,7 @@ class YellowLLMDB():
 
         query = "SELECT * FROM {} WHERE {};".format(tableName, condition)
 
-        self.__sustainConnection()
+        self.sustainConnection()
         result = self.cursor.execute(query)
 
         try:
@@ -217,7 +217,7 @@ class YellowLLMDB():
 
         try:
             query = "UPDATE {} SET {} WHERE {};".format(tableName, newData, condition)
-            self.__sustainConnection()
+            self.sustainConnection()
             result = self.cursor.execute(query)
         except Exception as e:
             print(query)
@@ -240,7 +240,7 @@ class YellowLLMDB():
 
         try:
             query = "DELETE FROM {} WHERE {};".format(tableName, condition)
-            self.__sustainConnection()
+            self.sustainConnection()
             result = self.cursor.execute(query)
         except Exception as e:
             print(query)

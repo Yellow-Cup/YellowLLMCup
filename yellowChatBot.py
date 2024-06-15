@@ -199,6 +199,7 @@ class YellowTelegram(__YellowChatBotSuperclass):
     _sendMessageAPIMethod = "sendMessage"
 
     headers = {"content-type": "application/json"}
+    messageLengthLimit = 4000
 
     def __init__(
         self,
@@ -292,7 +293,20 @@ class YellowTelegram(__YellowChatBotSuperclass):
 
     def sendMessage(self, chat, message):
         url = "{}{}".format(self._rootUrl, self._sendMessageAPIMethod)
-        data = {"chat_id": chat, "text": message}
-        result = requests.post(url, data=data)
+        messageParts = []
+        msgLength = len(message)
+        print(msgLength)
+        print("---")
+        ptr = 0
+        while ptr < msgLength:
+            step = ptr + self.messageLengthLimit
+            cut = step if step < msgLength else msgLength
+            messageParts.append(message[ptr:cut]) 
+            ptr = step
+            print(ptr)
+
+        for messagePart in messageParts:
+            data = {"chat_id": chat, "text": messagePart}
+            result = requests.post(url, data=data)
 
         return result.json()

@@ -46,7 +46,7 @@ class YellowContextCup:
 
 class YellowLLMCup:
 
-    pollPeriodSeconds = 3
+    pollPeriodSeconds = 1
     maxPollAttempts = 10
     agentRole = "Agent"
 
@@ -150,6 +150,9 @@ class YellowLLMCup:
         }
 
     def run(self):
+        pause = self.pollPeriodSeconds
+        pauseLimit = pause * 10
+
         while True:
 
             try:
@@ -166,8 +169,11 @@ class YellowLLMCup:
                 if self._failedPollAttempts >= self.maxPollAttempts:
                     exit()
 
+            updatesReceived = False
+
             for msg in self._chatBot.messages:
                 if msg.isHandledCode == 0:
+                    updatesReceived = True
                     user = msg.userId
                     customer = self.getCustomer(user)
                     context = self.getMessageContext(message=msg)
@@ -214,10 +220,17 @@ class YellowLLMCup:
                         self.updateMessageContext(message=msg, LLMResponseString=response)
                     self._chatBot.sendMessage(chat=msg.chatId, message=response)
                     msg.isHandledCode = 1
+                    self._DB.sustainConnection()
 
                     pprint(vars(msg))
                     print(response)
                     print(datetime.fromtimestamp(msg.date))
                     print(tokensUsed)
 
-            sleep(self.pollPeriodSeconds)
+            if updatesReceived:
+                pause = self.pollPeriodSeconds
+            else:
+                if pause < pauseLimit:
+                    pause += pause
+
+            sleep(pause)
